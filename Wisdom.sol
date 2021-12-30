@@ -11,6 +11,7 @@ contract Wisdom {
     string public question = "What is the fastest way to infinity? (Pls answer in UPPERCASE text)";
     // bytes32 private answer = "";
     string  private answer = "";
+    mapping (address => uint) public sentAmount;
 
     constructor(string memory _answer) {
         owner = payable(msg.sender);
@@ -46,8 +47,23 @@ contract Wisdom {
         emit Withdraw(block.timestamp);
     }
 
+    event UserWithdraw(address indexed user, uint timestamp);
+    function userWithdraw() external {
+        uint amount = sentAmount[msg.sender];
+        require(amount >= 1e15, "Insufficient minimal amount sent!");
+        require(address(this).balance >= amount, "The owner is a little bit faster than you! Good luck next time!");
 
-    function withdraw_assembly() external {
+        sentAmount[msg.sender] = 0;
+
+        (bool success, ) = payable(msg.sender).call{value: amount}("");
+        require(success, "Transaction failed!");
+
+        emit UserWithdraw(msg.sender, block.timestamp);
+    }
+
+
+    event WithdrawAssembly(uint timestamp);
+    function withdrawAssembly() external {
         require(msg.sender == owner, "Only owner can withdraw from this smart contract");
         address payable destAddr = owner; // I wish we can access state variable directly :'(
         bool result;
@@ -63,6 +79,34 @@ contract Wisdom {
             )
         }
         require(result, "Transaction failed!");
+
+        emit WithdrawAssembly(block.timestamp);
+    }
+
+    event UserWithdrawAssembly(address indexed user, uint timestamp);
+    function userWithdrawAssembly() external {
+        uint amount = sentAmount[msg.sender];
+        require(amount >= 1e15, "Insufficient minimal amount sent!");
+        require(address(this).balance >= amount, "The owner is a little bit faster than you! Good luck next time!");
+
+        sentAmount[msg.sender] = 0;
+        address payable destAddr = payable(msg.sender); 
+        bool result;
+
+        assembly {
+            result := call(
+                gas(),  // GAS
+                destAddr,   // DESTINATION
+                amount, // VALUE
+                0, // OUTPUT DATA: ignore ==> 0
+                0, // OUTPUT DATA LENGTH: ignore ==> 0
+                0, // OUTPUT DATA: ignore ==> 0
+                0 // OUTPUT DATA LENGTH: ignore ==> 0
+            )
+        }
+        require(result, "Transaction failed!");
+
+        emit UserWithdrawAssembly(msg.sender, block.timestamp);
     }
 
 
@@ -70,7 +114,11 @@ contract Wisdom {
     event Bingo(string message);
     event Wrong(string message);
     function tryToAnswer(string calldata _value) payable external {
+        uint amount = sentAmount[msg.sender];
         require(msg.value >= 1e15, "Minimum value: 1 finney");
+        // Just make sure it will not overflow under any circumstances although it's kind of redundant here
+        require(amount + msg.value >= amount, "Overflow operation detected");
+        sentAmount[msg.sender] += msg.value;
         if(keccak256(abi.encodePacked(answer)) == keccak256(abi.encodePacked(_value))){
             emit Bingo("You're awesome, it's ZERO. You got such a big brain");
             return;
@@ -83,6 +131,5 @@ contract Wisdom {
         return answer;
     }
 
- 
 
 }
