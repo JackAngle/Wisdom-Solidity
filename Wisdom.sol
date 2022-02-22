@@ -7,9 +7,8 @@ pragma solidity >=0.5.0 <0.9.0;
 // This contract is just4fun so don't be serious 
 // or send any amount of token to it without knowing that you won't get any token back.
 contract Wisdom {
-    address payable  public owner;
+    address payable public owner;
     string public question = "What is the fastest way to infinity? (Pls answer in UPPERCASE text)";
-    // bytes32 private answer = "";
     string  private answer = "";
     mapping (address => uint) public sentAmount;
 
@@ -33,17 +32,20 @@ contract Wisdom {
     }
 
 
-    event receiveEth(address sender, uint amount);
+    event ReceiveEth(address sender, uint amount);
     receive() external payable{
-        emit receiveEth(msg.sender, msg.value);
+        emit ReceiveEth(msg.sender, msg.value);
     }
 
 
-    event fallbackTrigger(address sender, uint amount);
+    event FallbackTrigger(address sender, uint amount);
     fallback() external payable{
-        emit fallbackTrigger(msg.sender, msg.value);
+        emit FallbackTrigger(msg.sender, msg.value);
     }
 
+    /**
+     * @dev Owner's withdraw function
+     */
     event Withdraw(uint timestamp);
     function withdraw() external {
         require(msg.sender == owner, "Only owner can withdraw from this smart contract");
@@ -52,6 +54,9 @@ contract Wisdom {
         emit Withdraw(block.timestamp);
     }
 
+    /**
+     * @dev User can use this to withdraw ETH sent to this contract
+     */
     event UserWithdraw(address indexed user, uint timestamp);
     function userWithdraw() external {
         uint amount = sentAmount[msg.sender];
@@ -66,7 +71,9 @@ contract Wisdom {
         emit UserWithdraw(msg.sender, block.timestamp);
     }
 
-
+    /**
+     * @dev Owner's withdraw function (assembly version)
+     */
     event WithdrawAssembly(uint timestamp);
     function withdrawAssembly() external {
         require(msg.sender == owner, "Only owner can withdraw from this smart contract");
@@ -88,6 +95,9 @@ contract Wisdom {
         emit WithdrawAssembly(block.timestamp);
     }
 
+    /**
+     * @dev User can use this to withdraw ETH sent to this contract (assembly version)
+     */
     event UserWithdrawAssembly(address indexed user, uint timestamp);
     function userWithdrawAssembly() external {
         uint amount = sentAmount[msg.sender];
@@ -114,8 +124,9 @@ contract Wisdom {
         emit UserWithdrawAssembly(msg.sender, block.timestamp);
     }
 
-
-    // If you wanna try hard
+    /**
+     * @dev If you wanna try hard and guess the answer
+     */
     event Bingo(string message);
     event Wrong(string message);
     function tryToAnswer(string calldata _value) payable external {
@@ -131,8 +142,10 @@ contract Wisdom {
         emit Wrong("Dude! It's ZERO, how can you not know it XD");
     }
 
-    //If you just want result in the boring way
-    function getAnswer() public view returns (string memory ) {
+    /**
+     * @dev If you just want result in the boring way
+     */
+    function getAnswer() external view returns (string memory ) {
         return answer;
     }
 
@@ -149,8 +162,39 @@ contract DelegateCallWisdom {
     string public question = "Do you know delegatecall?";
     string private answer = "yes";
     mapping (address => uint) public sentAmount;
+    mapping (address => bool) public whitelist;
 
+    constructor () {
+        owner = payable(msg.sender);
+    }
+
+    modifier onlyOwner(){
+        require(msg.sender == owner, "Only owner can perform this action");
+        _;
+
+    }
+
+    /**
+     * @dev Set the contract address that this contract can delegatecall
+     */
+    function setWhiteList(address _addr) external onlyOwner {
+        whitelist[_addr] = true;
+    }
+
+    /**
+     * @dev Reset the contract address that this contract can delegatecall
+     */
+    function resetWhiteList(address _addr) external onlyOwner {
+        whitelist[_addr] = false;
+    }
+
+    /**
+     * @dev Call Wisdom's tryToAnswer but the state variables gonna use is in this contract context
+     */
     function tryToAnswerDelegateCall(address _wisdomAddress, string calldata _answer) external payable {
+        require(_wisdomAddress != address(0), "Address should not be zero");
+        require(whitelist[_wisdomAddress] , "Address not whitelisted");
+
         (bool success, ) = _wisdomAddress.delegatecall(
             abi.encodeWithSelector(Wisdom.tryToAnswer.selector, _answer)
         );
